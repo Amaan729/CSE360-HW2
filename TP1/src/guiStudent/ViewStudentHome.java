@@ -5,231 +5,196 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.VBox; // Using VBox for layout
+import javafx.scene.layout.HBox;
+import javafx.geometry.Insets;  // For padding
 import javafx.scene.shape.Line;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import database.Database;
 import entityClasses.User;
-import guiUserUpdate.ViewUserUpdate;
+import guiUserUpdate.ViewUserUpdate; // Keep this import for the Account Update button
 
-
-/*******
- * <p> Title: GUIReviewerHomePage Class. </p>
- * 
- * <p> Description: The Java/FX-based Student Home Page.  The page is a stub for some role needed for
- * the application.  The widgets on this page are likely the minimum number and kind for other role
- * pages that may be needed.</p>
- * 
- * <p> Copyright: Lynn Robert Carter © 2025 </p>
- * 
- * @author Lynn Robert Carter
- * 
- * @version 1.00		2025-08-20 Initial version
- *  
+/**
+ * <p> Title: ViewStudentHome Class. </p>
+ * * <p> Description: The Java/FX-based Student Home Page. This view provides the main
+ * navigation point for users logged in with the student role. It allows access to
+ * account updates and the discussion board. </p>
+ * * <p> Copyright: Lynn Robert Carter © 2025 </p> // Copied from baseline
+ * * @author Amaan Sayed
+ * * @version 2.10 HW2 Integration - Added Discussion Board button
  */
-
 public class ViewStudentHome {
-	
-	/*-*******************************************************************************************
 
-	Attributes
-	
-	 */
-	
-	// These are the application values required by the user interface
-	
-	private static double width = applicationMain.FoundationsMain.WINDOW_WIDTH;
-	private static double height = applicationMain.FoundationsMain.WINDOW_HEIGHT;
+    /* Constants *********************************************************************************/
+    private static final double WINDOW_WIDTH = applicationMain.FoundationsMain.WINDOW_WIDTH;
+    private static final double WINDOW_HEIGHT = applicationMain.FoundationsMain.WINDOW_HEIGHT;
+    private static final double HORIZONTAL_MARGIN = 20.0;
+    private static final double VERTICAL_SPACING = 10.0;
 
+    /* Attributes (UI Elements) ******************************************************************/
+    // Main layout container
+    private static VBox mainLayout;
 
-	// These are the widget attributes for the GUI. There are 3 areas for this GUI.
-	
-	// GUI Area 1: It informs the user about the purpose of this page, whose account is being used,
-	// and a button to allow this user to update the account settings
-	protected static Label label_PageTitle = new Label();
-	protected static Label label_UserDetails = new Label();
-	protected static Button button_UpdateThisUser = new Button("Account Update");
-	
-	// This is a separator and it is used to partition the GUI for various tasks
-	protected static Line line_Separator1 = new Line(20, 95, width-20, 95);
+    // Top section (unchanged)
+    protected static Label label_PageTitle = new Label("Student Home Page");
+    protected static Label label_UserDetails = new Label(); // User details text set dynamically
+    protected static Button button_UpdateThisUser = new Button("Account Update");
+    protected static Line line_Separator1 = new Line(); // Positioned by layout container
 
-	// GUI ARea 2: This is a stub, so there are no widgets here.  For an actual role page, this are
-	// would contain the widgets needed for the user to play the assigned role.
-	
-	
-	
-	// This is a separator and it is used to partition the GUI for various tasks
-	protected static Line line_Separator4 = new Line(20, 525, width-20,525);
-	
-	// GUI Area 3: This is last of the GUI areas.  It is used for quitting the application and for
-	// logging out.
-	protected static Button button_Logout = new Button("Logout");
-	protected static Button button_Quit = new Button("Quit");
+    // Middle section
+    // HW2 Change: Added a new button to navigate to the Discussion Board
+    protected static Button button_GoToDiscussion = new Button("Go to Discussion Board");
 
-	// This is the end of the GUI objects for the page.
-	
-	// These attributes are used to configure the page and populate it with this user's information
-	private static ViewStudentHome theView;		// Used to determine if instantiation of the class
-												// is needed
+    // Bottom section (unchanged)
+    protected static Line line_Separator4 = new Line(); // Positioned by layout container
+    protected static Button button_Logout = new Button("Logout");
+    protected static Button button_Quit = new Button("Quit");
 
-	// Reference for the in-memory database so this package has access
-	private static Database theDatabase = applicationMain.FoundationsMain.database;
+    /* Attributes (MVC Components) ***************************************************************/
+    private static ViewStudentHome theView; // Singleton instance
+    // Why static? Consistent with baseline, allows access from Controller without passing instance.
+    private static Database theDatabase = applicationMain.FoundationsMain.database;
+    protected static Stage theStage;         // Reference to the main application stage
+    protected static Pane theRootPane;      // Original root pane, now holds mainLayout
+    protected static User theUser;           // Currently logged-in user
+    private static Scene theViewStudentHomeScene; // The scene for this view
 
-	protected static Stage theStage;			// The Stage that JavaFX has established for us	
-	protected static Pane theRootPane;			// The Pane that holds all the GUI widgets
-	protected static User theUser;				// The current logged in User
-	
+    // Constant role identifier (unchanged)
+    protected static final int theRole = 2; // Student role ID
 
-	private static Scene theViewStudentHomeScene;	// The shared Scene each invocation populates
-	protected static final int theRole = 2;		// Admin: 1; Student: 2; Staff: 3
+    /* Methods ***********************************************************************************/
 
-	/*-*******************************************************************************************
+    /**
+     * <p> Method: displayStudentHome() - Static Entry Point </p>
+     * * <p> Description: Displays the Student Home screen. Follows the singleton pattern.
+     * Initializes the view if needed, updates dynamic content (user details label),
+     * and shows the scene on the stage. </p>
+     * * @param ps The primary stage of the application.
+     * @param user The User object representing the logged-in student.
+     */
+    public static void displayStudentHome(Stage ps, User user) {
+        theStage = ps;
+        theUser = user;
 
-	Constructors
-	
-	 */
+        // Instantiate the singleton view if it's the first time displaying it.
+        // Why Singleton? Matches baseline architecture, ensures only one instance exists.
+        if (theView == null) {
+            theView = new ViewStudentHome(); // Calls the private constructor
+        }
 
+        // Update dynamic content before showing.
+        // Why update here? Ensures the correct username is displayed for the current session.
+        theDatabase.getUserAccountDetails(user.getUserName()); // Refresh cache just in case
+        applicationMain.FoundationsMain.activeHomePage = theRole; // Set active role context
+        label_UserDetails.setText("User: " + theUser.getUserName()); // Set the username label
 
-	/**********
-	 * <p> Method: displayStudentHome(Stage ps, User user) </p>
-	 * 
-	 * <p> Description: This method is the single entry point from outside this package to cause
-	 * the Student Home page to be displayed.
-	 * 
-	 * It first sets up every shared attributes so we don't have to pass parameters.
-	 * 
-	 * It then checks to see if the page has been setup.  If not, it instantiates the class, 
-	 * initializes all the static aspects of the GIUI widgets (e.g., location on the page, font,
-	 * size, and any methods to be performed).
-	 * 
-	 * After the instantiation, the code then populates the elements that change based on the user
-	 * and the system's current state.  It then sets the Scene onto the stage, and makes it visible
-	 * to the user.
-	 * 
-	 * @param ps specifies the JavaFX Stage to be used for this GUI and it's methods
-	 * 
-	 * @param user specifies the User for this GUI and it's methods
-	 * 
-	 */
-	public static void displayStudentHome(Stage ps, User user) {
-		
-		// Establish the references to the GUI and the current user
-		theStage = ps;
-		theUser = user;
-		
-		// If not yet established, populate the static aspects of the GUI
-		if (theView == null) theView = new ViewStudentHome();		// Instantiate singleton if needed
-		
-		// Populate the dynamic aspects of the GUI with the data from the user and the current
-		// state of the system.
-		theDatabase.getUserAccountDetails(user.getUserName());
-		applicationMain.FoundationsMain.activeHomePage = theRole;
-		
-		label_UserDetails.setText("User: " + theUser.getUserName());
-				
-		// Set the title for the window, display the page, and wait for the Admin to do something
-		theStage.setTitle("CSE 360 Foundations: Student Home Page");
-		theStage.setScene(theViewStudentHomeScene);
-		theStage.show();
-	}
-	
-	/**********
-	 * <p> Method: ViewStudentHome() </p>
-	 * 
-	 * <p> Description: This method initializes all the elements of the graphical user interface.
-	 * This method determines the location, size, font, color, and change and event handlers for
-	 * each GUI object.</p>
-	 * 
-	 * This is a singleton and is only performed once.  Subsequent uses fill in the changeable
-	 * fields using the displayStaffHome method.</p>
-	 * 
-	 */
-	private ViewStudentHome() {
+        // Set the window title and display the scene.
+        theStage.setTitle("CSE 360 Foundations: Student Home Page");
+        theStage.setScene(theViewStudentHomeScene);
+        theStage.show();
+    }
 
-		// Create the Pane for the list of widgets and the Scene for the window
-		theRootPane = new Pane();
-		theViewStudentHomeScene = new Scene(theRootPane, width, height);	// Create the scene
-		
-		// Set the title for the window
-		
-		// Populate the window with the title and other common widgets and set their static state
-		
-		// GUI Area 1
-		label_PageTitle.setText("Student Home Page");
-		setupLabelUI(label_PageTitle, "Arial", 28, width, Pos.CENTER, 0, 5);
+    /**
+     * <p> Method: ViewStudentHome() - Private Constructor </p>
+     * * <p> Description: Initializes all static UI elements and layout for the Student Home screen.
+     * Sets up styles, positions (handled by VBox), and event handlers. Called only once
+     * when the singleton instance is created. </p>
+     */
+    private ViewStudentHome() {
+        // Use VBox for primary layout - simplifies vertical arrangement.
+        mainLayout = new VBox(VERTICAL_SPACING);
+        mainLayout.setPadding(new Insets(VERTICAL_SPACING, HORIZONTAL_MARGIN, VERTICAL_SPACING, HORIZONTAL_MARGIN));
+        mainLayout.setAlignment(Pos.TOP_CENTER); // Center content horizontally
 
-		label_UserDetails.setText("User: " + theUser.getUserName());
-		setupLabelUI(label_UserDetails, "Arial", 20, width, Pos.BASELINE_LEFT, 20, 55);
-		
-		setupButtonUI(button_UpdateThisUser, "Dialog", 18, 170, Pos.CENTER, 610, 45);
-		button_UpdateThisUser.setOnAction((event) ->
-			{ViewUserUpdate.displayUserUpdate(theStage, theUser); });
-		
-		// GUI Area 2
-		
-			// This is a stub, so this area is empty
-		
-		
-		// GUI Area 3
-        setupButtonUI(button_Logout, "Dialog", 18, 250, Pos.CENTER, 20, 540);
-        button_Logout.setOnAction((event) -> {ControllerStudentHome.performLogout(); });
+        // Root Pane setup (consistent with baseline structure)
+        theRootPane = new Pane(mainLayout); // Place VBox onto the Pane
+        theViewStudentHomeScene = new Scene(theRootPane, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+        // --- Configure UI Elements ---
+
+        // 1. Top Section (Title, User Details, Update Button)
+        setupLabelUI(label_PageTitle, "Arial", 28, WINDOW_WIDTH - 2 * HORIZONTAL_MARGIN, Pos.CENTER);
+        // Note: label_UserDetails text is set dynamically in displayStudentHome()
+        setupLabelUI(label_UserDetails, "Arial", 20, WINDOW_WIDTH - 2 * HORIZONTAL_MARGIN, Pos.BASELINE_LEFT);
+        setupButtonUI(button_UpdateThisUser, "Dialog", 18, 170, Pos.CENTER);
+        // Event handler linking to User Update view (unchanged from TP1)
+        button_UpdateThisUser.setOnAction((event) -> {
+            ViewUserUpdate.displayUserUpdate(theStage, theUser);
+        });
+        // Separator line configuration (width set dynamically)
+        line_Separator1.setStartX(0); line_Separator1.setEndX(WINDOW_WIDTH - 2 * HORIZONTAL_MARGIN);
+        line_Separator1.setStrokeWidth(1);
+
+        // 2. Middle Section (HW2 Change: Discussion Board Button)
+        setupButtonUI(button_GoToDiscussion, "Dialog", 18, 250, Pos.CENTER);
+        // Event handler linking to the Controller method that opens the discussion board.
+        // Why Controller method? Follows MVC - View delegates actions to Controller.
+        button_GoToDiscussion.setOnAction((event) -> {
+            ControllerStudentHome.performGoToDiscussionBoard();
+        });
+
+        // 3. Bottom Section (Logout, Quit Buttons)
+        setupButtonUI(button_Logout, "Dialog", 18, 250, Pos.CENTER);
+        button_Logout.setOnAction((event) -> { ControllerStudentHome.performLogout(); }); // Link to Controller
+
+        setupButtonUI(button_Quit, "Dialog", 18, 250, Pos.CENTER);
+        button_Quit.setOnAction((event) -> { ControllerStudentHome.performQuit(); });     // Link to Controller
+        // Separator line configuration
+        line_Separator4.setStartX(0); line_Separator4.setEndX(WINDOW_WIDTH - 2 * HORIZONTAL_MARGIN);
+        line_Separator4.setStrokeWidth(1);
+
+        // --- Add elements to the VBox layout in display order ---
+        // Using HBox for buttons that should appear side-by-side or centered relative to each other.
+        HBox topRow = new HBox(); // To potentially place user details and update button side-by-side if needed
+        topRow.getChildren().addAll(label_UserDetails); // Simplified for now
+        // Could add button_UpdateThisUser here too if horizontal layout desired.
         
-        setupButtonUI(button_Quit, "Dialog", 18, 250, Pos.CENTER, 300, 540);
-        button_Quit.setOnAction((event) -> {ControllerStudentHome.performQuit(); });
+        HBox bottomButtons = new HBox(VERTICAL_SPACING); // HBox for Logout/Quit
+        bottomButtons.setAlignment(Pos.CENTER);
+        bottomButtons.getChildren().addAll(button_Logout, button_Quit);
 
-		// This is the end of the GUI initialization code
-		
-		// Place all of the widget items into the Root Pane's list of children
-         theRootPane.getChildren().addAll(
-			label_PageTitle, label_UserDetails, button_UpdateThisUser, line_Separator1,
-	        line_Separator4, button_Logout, button_Quit);
-}
-	
-	
-	/*-********************************************************************************************
+        mainLayout.getChildren().addAll(
+            label_PageTitle,
+            topRow, // Contains user details
+            button_UpdateThisUser, // Keeping it separate for now
+            line_Separator1,
+            // Add spacing or specific layout panes if more structure is needed
+            new Pane() {{ setPrefHeight(100); }}, // Add some vertical space before the button
+            button_GoToDiscussion, // HW2 Change: Added discussion button
+            new Pane() {{ setPrefHeight(100); }}, // Add space after button
+            line_Separator4,
+            bottomButtons // Contains Logout/Quit
+        );
+        
+        // Ensure VBox fills the pane width
+         mainLayout.setPrefWidth(WINDOW_WIDTH - 2*HORIZONTAL_MARGIN);
+         
+         // VBox manages positioning within the Pane. Set Pane size.
+         theRootPane.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+    }
 
-	Helper methods to reduce code length
 
-	 */
-	
-	/**********
-	 * Private local method to initialize the standard fields for a label
-	 * 
-	 * @param l		The Label object to be initialized
-	 * @param ff	The font to be used
-	 * @param f		The size of the font to be used
-	 * @param w		The width of the Button
-	 * @param p		The alignment (e.g. left, centered, or right)
-	 * @param x		The location from the left edge (x axis)
-	 * @param y		The location from the top (y axis)
-	 */
-	private static void setupLabelUI(Label l, String ff, double f, double w, Pos p, double x, 
-			double y){
-		l.setFont(Font.font(ff, f));
-		l.setMinWidth(w);
-		l.setAlignment(p);
-		l.setLayoutX(x);
-		l.setLayoutY(y);		
-	}
-	
-	
-	/**********
-	 * Private local method to initialize the standard fields for a button
-	 * 
-	 * @param b		The Button object to be initialized
-	 * @param ff	The font to be used
-	 * @param f		The size of the font to be used
-	 * @param w		The width of the Button
-	 * @param p		The alignment (e.g. left, centered, or right)
-	 * @param x		The location from the left edge (x axis)
-	 * @param y		The location from the top (y axis)
-	 */
-	private static void setupButtonUI(Button b, String ff, double f, double w, Pos p, double x, 
-			double y){
-		b.setFont(Font.font(ff, f));
-		b.setMinWidth(w);
-		b.setAlignment(p);
-		b.setLayoutX(x);
-		b.setLayoutY(y);		
-	}
+    /* Helper Methods for UI Styling (Consistent with baseline) *******************************/
+    // These helpers reduce code duplication when setting common properties for UI elements.
+
+    /**
+     * Helper to configure standard Label properties.
+     */
+    private static void setupLabelUI(Label l, String ff, double f, double w, Pos p){
+        l.setFont(Font.font(ff, f));
+        l.setMinWidth(w);
+        l.setAlignment(p);
+        // Removed layoutX/Y as VBox manages position.
+    }
+
+    /**
+     * Helper to configure standard Button properties.
+     */
+    private static void setupButtonUI(Button b, String ff, double f, double w, Pos p){
+        b.setFont(Font.font(ff, f));
+        b.setMinWidth(w);
+        b.setAlignment(p);
+        // Removed layoutX/Y as VBox/HBox manage position.
+    }
 }

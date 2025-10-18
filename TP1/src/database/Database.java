@@ -711,8 +711,11 @@ public class Database {
 
     /** Fetches all account details and updates the internal cache including userID. */
     public boolean getUserAccountDetails(String username) {
+        // Why check for invalid names? Prevents querying for "<Select a User>" or empty strings.
         if (username == null || username.trim().isEmpty() || username.equals("<Select a User>")) {
-             currentUserID = -1; currentUsername = null; /* reset other fields */ return false;
+             currentUserID = -1; currentUsername = null; 
+             // ... (ideally reset all other cached fields too) ...
+             return false;
         }
         String query = "SELECT * FROM userDB WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(query)) {
@@ -733,11 +736,17 @@ public class Database {
                 System.out.println("Cached details for user: " + currentUsername + " (ID: " + currentUserID + ")");
                 return true;
             } else {
-                 currentUserID = -1; currentUsername = null; /* reset other fields */ return false;
+                 // User not found, clear cache
+                 currentUserID = -1; currentUsername = null; 
+                 // ... (reset other cached fields) ...
+                 return false;
             }
         } catch (SQLException e) {
             e.printStackTrace();
-             currentUserID = -1; currentUsername = null; /* reset other fields */ return false;
+             // Error, clear cache
+             currentUserID = -1; currentUsername = null; 
+             // ... (reset other cached fields) ...
+             return false;
         }
     }
 
@@ -745,25 +754,27 @@ public class Database {
     public boolean updateUserRole(String username, String role, String value) {
         String roleColumn;
         boolean booleanValue = Boolean.parseBoolean(value);
+        // Determine the correct database column based on the role string.
         if (role.equalsIgnoreCase("Admin")) roleColumn = "adminRole";
         else if (role.equalsIgnoreCase("Student")) roleColumn = "newStudent";
         else if (role.equalsIgnoreCase("Staff")) roleColumn = "newStaff";
-        else { System.err.println("Invalid role: " + role); return false; }
+        else { System.err.println("Invalid role: " + role); return false; } // Invalid role
 
         String query = "UPDATE userDB SET " + roleColumn + " = ? WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(query)) {
             pstmt.setBoolean(1, booleanValue);
             pstmt.setString(2, username);
             pstmt.executeUpdate();
+             // Update internal cache *only if* the user being modified is the one currently cached.
              if (username != null && username.equals(this.currentUsername)) {
                  if (roleColumn.equals("adminRole")) currentAdminRole = booleanValue;
                  else if (roleColumn.equals("newStudent")) currentNewStudent = booleanValue;
                  else if (roleColumn.equals("newStaff")) currentNewStaff = booleanValue;
              }
-            return true;
+            return true; // Success
         } catch (SQLException e) {
             e.printStackTrace();
-            return false;
+            return false; // Failure
         }
     }
 
@@ -803,8 +814,10 @@ public class Database {
              ResultSet resultSet = stmt.executeQuery(query)) {
             ResultSetMetaData meta = resultSet.getMetaData();
             int columnCount = meta.getColumnCount();
+            // Print header row
             for (int i = 1; i <= columnCount; i++) System.out.printf("%-20s | ", meta.getColumnLabel(i));
             System.out.println("\n" + "-".repeat(columnCount * 23)); // Dynamic separator line
+            // Print data rows
             while (resultSet.next()) {
                 for (int i = 1; i <= columnCount; i++) System.out.printf("%-20s | ", resultSet.getString(i));
                 System.out.println();
@@ -815,12 +828,13 @@ public class Database {
 
     /** Closes the database statement and connection. */
     public void closeConnection() {
+        // Why separate try-catch blocks? Ensures an attempt is made to close both resources.
         try {
             if(statement!=null && !statement.isClosed()) { statement.close(); System.out.println("DB statement closed."); }
-        } catch(SQLException se2) { se2.printStackTrace(); }
+        } catch(SQLException se2) { se2.printStackTrace(); } // Log but continue
         try {
             if(connection!=null && !connection.isClosed()) { connection.close(); System.out.println("DB connection closed."); }
-        } catch(SQLException se){ se.printStackTrace(); }
+        } catch(SQLException se){ se.printStackTrace(); } // Log error
     }
 
     /** Retrieves all users formatted for display in lists/tables. */
@@ -831,27 +845,37 @@ public class Database {
              ResultSet rs = pstmt.executeQuery()) {
             while (rs.next()) {
                 String username = rs.getString("userName");
+                // Construct full name, handling potential null/empty middle names
                 String first = rs.getString("firstName");
                 String middle = rs.getString("middleName");
                 String last = rs.getString("lastName");
                 String name = first + (middle == null || middle.trim().isEmpty() ? "" : " " + middle) + (last == null || last.trim().isEmpty() ? "" : " " + last);
                 String email = rs.getString("emailAddress");
+                // Build roles string
                 StringBuilder rolesBuilder = new StringBuilder();
                 if (rs.getBoolean("adminRole")) rolesBuilder.append("Admin ");
                 if (rs.getBoolean("newStudent")) rolesBuilder.append("Student ");
                 if (rs.getBoolean("newStaff")) rolesBuilder.append("Staff ");
-                String roles = rolesBuilder.toString().trim();
+                String roles = rolesBuilder.toString().trim(); // Remove trailing space
+                // Add new DTO for list view
                 userList.add(new UserForList(username, name.trim(), email, roles));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            e.printStackTrace(); // Log error, return empty list
         }
         return userList;
     }
 
     // --- HW2 Expanded Scope: Post/Reply CRUD Methods (Simpler versions + WithInfo versions) ---
+    // Why keep simple versions? They are useful for basic operations (like create/update/delete)
+    // where the complex calculated data isn't needed as input.
 
-    /** Original createPost - updated for threadName & default timestamp */
+    /**
+     * <p> Method: createPost() </p>
+     * <p> Description: Inserts a new post record into the 'posts' table. Uses database defaults
+     * for timestamp. </p>
+     * @param post The Post object containing the title, author username, content, and thread name.
+     */
     public void createPost(Post post) {
         String sql = "INSERT INTO posts (title, authorUsername, content, threadName) VALUES (?, ?, ?, ?)"; // Timestamp uses DB default
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -866,7 +890,12 @@ public class Database {
          }
     }
 
-    /** Original getAllPosts - less info than getAllPostsWithInfo */
+    /**
+     * <p> Method: getAllPosts() </p>
+     * <p> Description: Simple retrieval of all posts *without* calculated counts or read status.
+     * Useful for testing or scenarios where extended info isn't needed. </p>
+     * @return A List of basic Post objects, ordered by most recent first.
+     */
     public List<Post> getAllPosts() {
         List<Post> posts = new ArrayList<>();
         String sql = "SELECT * FROM posts ORDER BY timestamp DESC";
@@ -885,7 +914,11 @@ public class Database {
         return posts;
     }
 
-    /** Original updatePost */
+    /**
+     * <p> Method: updatePost() </p>
+     * <p> Description: Updates the title and content of an existing post identified by its postID. </p>
+     * @param post The Post object containing the postID and the new title/content.
+     */
     public void updatePost(Post post) {
         String sql = "UPDATE posts SET title = ?, content = ? WHERE postID = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -899,7 +932,11 @@ public class Database {
          }
     }
 
-    /** Original deletePost */
+    /**
+     * <p> Method: deletePost() </p>
+     * <p> Description: Deletes a post record from the 'posts' table. Replies remain, per user story. </p>
+     * @param postID The ID of the post to delete.
+     */
     public void deletePost(int postID) {
         String sql = "DELETE FROM posts WHERE postID = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -912,7 +949,12 @@ public class Database {
          }
     }
 
-    /** Original getPost helper */
+    /**
+     * <p> Method: getPost() - Helper </p>
+     * <p> Description: Retrieves a single, basic Post object by its ID. Used to check for existence. </p>
+     * @param postID The ID of the post to retrieve.
+     * @return The Post object if found, otherwise null.
+     */
      public Post getPost(int postID) {
          String sql = "SELECT * FROM posts WHERE postID = ?";
          try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -928,10 +970,14 @@ public class Database {
               System.err.println("Error retrieving post " + postID + ": " + e.getMessage());
               e.printStackTrace();
           }
-         return null;
+         return null; // Return null if not found or on error
      }
 
-    /** Original createReply - uses default timestamp */
+    /**
+     * <p> Method: createReply() </p>
+     * <p> Description: Inserts a new reply record. Uses database default for timestamp. </p>
+     * @param reply The Reply object containing postID, author, and content.
+     */
     public void createReply(Reply reply) {
         String sql = "INSERT INTO replies (postID, authorUsername, content) VALUES (?, ?, ?)"; // Timestamp uses DB default
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -945,7 +991,12 @@ public class Database {
          }
     }
 
-    /** Original getRepliesForPost - less info, no filtering */
+    /**
+     * <p> Method: getRepliesForPost() </p>
+     * <p> Description: Simple retrieval of all replies for a post *without* read status. </p>
+     * @param postID The ID of the parent post.
+     * @return A List of basic Reply objects, ordered by oldest first.
+     */
     public List<Reply> getRepliesForPost(int postID) {
         List<Reply> replies = new ArrayList<>();
         String sql = "SELECT * FROM replies WHERE postID = ? ORDER BY timestamp ASC";
@@ -965,7 +1016,11 @@ public class Database {
         return replies;
     }
 
-    /** Original updateReply */
+    /**
+     * <p> Method: updateReply() </p>
+     * <p> Description: Updates the content of an existing reply. </p>
+     * @param reply The Reply object containing the replyID and the new content.
+     */
     public void updateReply(Reply reply) {
         String sql = "UPDATE replies SET content = ? WHERE replyID = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -978,7 +1033,11 @@ public class Database {
          }
     }
 
-    /** Original deleteReply */
+    /**
+     * <p> Method: deleteReply() </p>
+     * <p> Description: Deletes a reply record from the 'replies' table. </p>
+     * @param replyID The ID of the reply to delete.
+     */
     public void deleteReply(int replyID) {
         String sql = "DELETE FROM replies WHERE replyID = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -994,7 +1053,6 @@ public class Database {
     // --- HW2 Expanded Scope: New DTO-returning Methods ---
     // (These are the primary methods the Controller will use for displaying data)
     
-
     /**
      * <p> Method: markPostAsRead() </p>
      * <p> Description: Records that a specific user has read a specific post by inserting (or merging)
@@ -1002,18 +1060,21 @@ public class Database {
      * @param postID The ID of the post that was read.
      * @param userID The ID of the user who read the post. If -1, the method returns without action.
      */
-     public void markPostAsRead(int postID, int userID) { // <-- Must be public
+     public void markPostAsRead(int postID, int userID) { 
          if (userID == -1) {
              System.err.println("Attempted to mark post read with invalid userID (-1).");
              return;
          }
+         // Why MERGE? Atomically handles both INSERT (if not read yet) and UPDATE (if read again).
+         // It gracefully handles the "already exists" case (PK violation) without throwing an exception.
          String sql = "MERGE INTO post_read_status (userID, postID) KEY(userID, postID) VALUES (?, ?)";
          try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
              pstmt.setInt(1, userID);
              pstmt.setInt(2, postID);
              pstmt.executeUpdate();
          } catch (SQLException e) {
-             if (!e.getSQLState().equals("23505")) { // 23505 is unique constraint violation
+             // Log errors other than primary key violations (which are expected if MERGE isn't fully supported/used)
+             if (e.getSQLState() == null || !e.getSQLState().equals("23505")) { // 23505 is unique constraint violation
                   System.err.println("Error marking post " + postID + " as read for user " + userID + ": " + e.getMessage());
                  e.printStackTrace();
              }
@@ -1027,7 +1088,7 @@ public class Database {
      * @param replyID The ID of the reply that was read.
      * @param userID The ID of the user who read the reply. If -1, the method returns without action.
      */
-     public void markReplyAsRead(int replyID, int userID) { // <-- Must be public
+     public void markReplyAsRead(int replyID, int userID) { 
          if (userID == -1) {
              System.err.println("Attempted to mark reply read with invalid userID (-1).");
              return;
@@ -1038,126 +1099,236 @@ public class Database {
              pstmt.setInt(2, replyID);
              pstmt.executeUpdate();
          } catch (SQLException e) {
-              if (!e.getSQLState().equals("23505")) {
+              if (e.getSQLState() == null || !e.getSQLState().equals("23505")) { // 23505 = unique constraint violation
                   System.err.println("Error marking reply " + replyID + " as read for user " + userID + ": " + e.getMessage());
                  e.printStackTrace();
               }
          }
      }
 
-    /** Retrieves all posts with counts and read status for the viewing user. */
+    /**
+     * <p> Method: getAllPostsWithInfo() </p>
+     * <p> Description: Retrieves all posts, calculating reply counts (total and unread for the viewer)
+     * and the post's read status for the viewer. Uses SQL subqueries/joins for efficiency. </p>
+     * @param viewingUserID The ID of the user currently viewing the posts. Required for read status and unread counts.
+     * @return A List of PostInfo Data Transfer Objects (DTOs), ordered by most recent post first. Returns an empty list on error.
+     */
     public List<PostInfo> getAllPostsWithInfo(int viewingUserID) {
         List<PostInfo> postsInfo = new ArrayList<>();
-        if (viewingUserID == -1) return postsInfo;
+        if (viewingUserID == -1) return postsInfo; // Cannot calculate user-specific info without a valid user ID.
+        
+        // Why this complex query? It gathers all required data (post details, total replies,
+        // user-specific unread replies, user-specific post read status) in a *single* database
+        // round-trip, which is far more efficient than querying for each post individually.
         String sql = "SELECT p.*, " +
-                     " COALESCE(rc.reply_count, 0) AS totalReplies, " +
-                     " COALESCE(urc.unread_reply_count, 0) AS unreadReplies, " +
-                     " CASE WHEN prs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead " +
+                     "       COALESCE(rc.reply_count, 0) AS totalReplies, " + // Get total reply count
+                     "       COALESCE(urc.unread_reply_count, 0) AS unreadReplies, " + // Get user-specific unread reply count
+                     "       CASE WHEN prs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead " + // Get user-specific post read status
                      "FROM posts p " +
+                     // Subquery (rc): Counts total replies for each postID.
                      "LEFT JOIN (SELECT postID, COUNT(*) AS reply_count FROM replies GROUP BY postID) rc ON p.postID = rc.postID " +
+                     // Subquery (urc): Counts replies for each postID that *do not* have a read status entry for the viewing user.
                      "LEFT JOIN (SELECT r.postID, COUNT(r.replyID) AS unread_reply_count " +
-                     "           FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? " +
+                     "           FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? " + // Check against viewing user
                      "           WHERE rrs.userID IS NULL GROUP BY r.postID) urc ON p.postID = urc.postID " +
+                     // Join (prs): Checks if an entry exists for this post and viewing user in the post_read_status table.
                      "LEFT JOIN post_read_status prs ON p.postID = prs.postID AND prs.userID = ? " +
-                     "ORDER BY p.timestamp DESC";
+                     "ORDER BY p.timestamp DESC"; // Order by most recent post
+
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setInt(1, viewingUserID);
-            pstmt.setInt(2, viewingUserID);
+            // Bind the viewingUserID to the 3 placeholders (?) in the query.
+            pstmt.setInt(1, viewingUserID); // For unread reply count subquery
+            pstmt.setInt(2, viewingUserID); // For post read status join
+            
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
-                Post post = new Post(rs.getInt("postID"), rs.getString("title"), rs.getString("authorUsername"), rs.getString("content"), rs.getTimestamp("timestamp"), rs.getString("threadName"));
+                // Create the base Post object
+                Post post = new Post(rs.getInt("postID"), rs.getString("title"), rs.getString("authorUsername"),
+                                     rs.getString("content"), rs.getTimestamp("timestamp"), rs.getString("threadName"));
+                // Create the DTO
                 PostInfo info = new PostInfo(post);
+                // Populate the calculated fields
                 info.setReplyCount(rs.getInt("totalReplies"));
                 info.setUnreadReplyCount(rs.getInt("unreadReplies"));
                 info.setRead(rs.getBoolean("isRead"));
-                postsInfo.add(info);
+                postsInfo.add(info); // Add DTO to the list
             }
-        } catch (SQLException e) { e.printStackTrace(); }
-        return postsInfo;
+        } catch (SQLException e) { 
+            System.err.println("Error retrieving posts with info for user " + viewingUserID + ": " + e.getMessage());
+            e.printStackTrace(); 
+        }
+        return postsInfo; // Return the list (possibly empty)
     }
 
-    /** Searches posts with keyword/thread, returning DTOs with counts and read status. */
+    /**
+     * <p> Method: searchPostsWithInfo() </p>
+     * <p> Description: Searches posts based on keyword (in title or content) and optional thread filter,
+     * retrieving results as PostInfo DTOs including reply counts and read status for the viewing user. </p>
+     * @param keyword The search term (case-insensitive).
+     * @param threadName The thread to filter by (case-insensitive, null/"All" for all threads).
+     * @param viewingUserID The ID of the user performing the search (for read status/counts).
+     * @return A List of matching PostInfo DTOs, ordered by most recent first. Empty list on error or no match.
+     */
     public List<PostInfo> searchPostsWithInfo(String keyword, String threadName, int viewingUserID) {
          List<PostInfo> postsInfo = new ArrayList<>();
-         if (viewingUserID == -1) return postsInfo;
+         if (viewingUserID == -1) return postsInfo; // Need valid user ID
+
+         // Determine if thread filtering is active.
          boolean filterByThread = (threadName != null && !threadName.trim().isEmpty() && !threadName.equalsIgnoreCase("All"));
-         String searchPattern = "%" + keyword.toUpperCase() + "%";
+         // Prepare keyword pattern for case-insensitive LIKE search.
+         String searchPattern = "%" + keyword.toUpperCase() + "%"; 
+
+        // Base query is the same complex structure as getAllPostsWithInfo.
          String sqlBase = "SELECT p.*, COALESCE(rc.reply_count, 0) AS totalReplies, COALESCE(urc.unread_reply_count, 0) AS unreadReplies, CASE WHEN prs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead " +
                          "FROM posts p " +
                          "LEFT JOIN (SELECT postID, COUNT(*) AS reply_count FROM replies GROUP BY postID) rc ON p.postID = rc.postID " +
                          "LEFT JOIN (SELECT r.postID, COUNT(r.replyID) AS unread_reply_count FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? WHERE rrs.userID IS NULL GROUP BY r.postID) urc ON p.postID = urc.postID " +
                          "LEFT JOIN post_read_status prs ON p.postID = prs.postID AND prs.userID = ? ";
-        String sqlWhere = filterByThread ? "WHERE (UPPER(p.title) LIKE ? OR UPPER(p.content) LIKE ?) AND UPPER(p.threadName) = ? " : "WHERE (UPPER(p.title) LIKE ? OR UPPER(p.content) LIKE ?) ";
-        String sqlOrder = "ORDER BY p.timestamp DESC";
-        String sql = sqlBase + sqlWhere + sqlOrder;
+        
+        // Dynamically add WHERE clauses based on search criteria.
+        String sqlWhere;
+        if (filterByThread) {
+            // WHERE clause for keyword match (title OR content) AND thread match.
+            sqlWhere = "WHERE (UPPER(p.title) LIKE ? OR UPPER(p.content) LIKE ?) AND UPPER(p.threadName) = ? ";
+        } else {
+            // WHERE clause for keyword match (title OR content) only.
+            sqlWhere = "WHERE (UPPER(p.title) LIKE ? OR UPPER(p.content) LIKE ?) ";
+        }
+        
+        String sqlOrder = "ORDER BY p.timestamp DESC"; // Order results.
+        String sql = sqlBase + sqlWhere + sqlOrder; // Combine query parts.
+
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            // Bind parameters carefully in the correct order based on the query structure.
             int paramIndex = 1;
-            pstmt.setInt(paramIndex++, viewingUserID);
-            pstmt.setInt(paramIndex++, viewingUserID);
-            pstmt.setString(paramIndex++, searchPattern);
-            pstmt.setString(paramIndex++, searchPattern);
-            if (filterByThread) pstmt.setString(paramIndex++, threadName.toUpperCase());
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                 Post post = new Post(rs.getInt("postID"), rs.getString("title"), rs.getString("authorUsername"), rs.getString("content"), rs.getTimestamp("timestamp"), rs.getString("threadName"));
-                 PostInfo info = new PostInfo(post);
-                 info.setReplyCount(rs.getInt("totalReplies"));
-                 info.setUnreadReplyCount(rs.getInt("unreadReplies"));
-                 info.setRead(rs.getBoolean("isRead"));
-                 postsInfo.add(info);
+            pstmt.setInt(paramIndex++, viewingUserID);    // For unread reply count subquery (?)
+            pstmt.setInt(paramIndex++, viewingUserID);    // For post read status join (?)
+            pstmt.setString(paramIndex++, searchPattern); // Keyword for title LIKE ?
+            pstmt.setString(paramIndex++, searchPattern); // Keyword for content LIKE ?
+            if (filterByThread) {
+                pstmt.setString(paramIndex++, threadName.toUpperCase()); // Thread filter ?
             }
-        } catch (SQLException e) { e.printStackTrace(); }
-        return postsInfo;
+            
+            try (ResultSet rs = pstmt.executeQuery()) { // Execute and process
+                while (rs.next()) {
+                     // Reconstruct Post object.
+                     Post post = new Post(rs.getInt("postID"), rs.getString("title"), rs.getString("authorUsername"), rs.getString("content"), rs.getTimestamp("timestamp"), rs.getString("threadName"));
+                     // Create DTO and populate calculated fields.
+                     PostInfo info = new PostInfo(post);
+                     info.setReplyCount(rs.getInt("totalReplies"));
+                     info.setUnreadReplyCount(rs.getInt("unreadReplies"));
+                     info.setRead(rs.getBoolean("isRead"));
+                     postsInfo.add(info); // Add DTO to results list.
+                }
+            } // ResultSet closed.
+        } catch (SQLException e) {
+             // Log specific error details.
+             System.err.println("Error searching posts with info (keyword='" + keyword + "', thread='" + threadName + "'): " + e.getMessage());
+             e.printStackTrace();
+        }
+        return postsInfo; // Return results (possibly empty).
     }
 
-    /** Retrieves posts by a specific author, returning DTOs with counts and read status. */
+    /**
+     * <p> Method: getPostsByAuthorWithInfo() </p>
+     * <p> Description: Retrieves all posts authored by a specific username, returning them as
+     * PostInfo DTOs including reply counts and read status relative to the viewing user. </p>
+     * @param authorUsername The username of the author whose posts are requested.
+     * @param viewingUserID The ID of the user currently viewing these posts (for read status/counts).
+     * @return A List of PostInfo DTOs for posts by the specified author, ordered by most recent first. Empty list on error.
+     */
     public List<PostInfo> getPostsByAuthorWithInfo(String authorUsername, int viewingUserID) {
          List<PostInfo> postsInfo = new ArrayList<>();
-         if (viewingUserID == -1 || authorUsername == null || authorUsername.trim().isEmpty()) return postsInfo;
-         String sql = "SELECT p.*, COALESCE(rc.reply_count, 0) AS totalReplies, COALESCE(urc.unread_reply_count, 0) AS unreadReplies, CASE WHEN prs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead " +
+         if (viewingUserID == -1 || authorUsername == null || authorUsername.trim().isEmpty()) return postsInfo; // Basic validation
+
+         // Query is similar to getAllPostsWithInfo, but adds a WHERE clause to filter by authorUsername.
+         String sql = "SELECT p.*, " +
+                      "       COALESCE(rc.reply_count, 0) AS totalReplies, " +
+                      "       COALESCE(urc.unread_reply_count, 0) AS unreadReplies, " +
+                      "       CASE WHEN prs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead " +
                       "FROM posts p " +
                       "LEFT JOIN (SELECT postID, COUNT(*) AS reply_count FROM replies GROUP BY postID) rc ON p.postID = rc.postID " +
-                      "LEFT JOIN (SELECT r.postID, COUNT(r.replyID) AS unread_reply_count FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? WHERE rrs.userID IS NULL GROUP BY r.postID) urc ON p.postID = urc.postID " +
+                      "LEFT JOIN (SELECT r.postID, COUNT(r.replyID) AS unread_reply_count " +
+                      "           FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? " +
+                      "           WHERE rrs.userID IS NULL GROUP BY r.postID) urc ON p.postID = urc.postID " +
                       "LEFT JOIN post_read_status prs ON p.postID = prs.postID AND prs.userID = ? " +
-                      "WHERE p.authorUsername = ? ORDER BY p.timestamp DESC";
+                      "WHERE p.authorUsername = ? " + // *** Filter by author username ***
+                      "ORDER BY p.timestamp DESC";
+
          try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-             pstmt.setInt(1, viewingUserID);
-             pstmt.setInt(2, viewingUserID);
-             pstmt.setString(3, authorUsername);
-             ResultSet rs = pstmt.executeQuery();
-             while (rs.next()) {
-                  Post post = new Post(rs.getInt("postID"), rs.getString("title"), rs.getString("authorUsername"), rs.getString("content"), rs.getTimestamp("timestamp"), rs.getString("threadName"));
-                  PostInfo info = new PostInfo(post);
-                  info.setReplyCount(rs.getInt("totalReplies"));
-                  info.setUnreadReplyCount(rs.getInt("unreadReplies"));
-                  info.setRead(rs.getBoolean("isRead"));
-                  postsInfo.add(info);
-             }
-         } catch (SQLException e) { e.printStackTrace(); }
-         return postsInfo;
+             // Bind parameters: viewing user ID twice, then the author username.
+             pstmt.setInt(1, viewingUserID);    // For unread reply count subquery
+             pstmt.setInt(2, viewingUserID);    // For post read status join
+             pstmt.setString(3, authorUsername); // The author filter
+             
+             try (ResultSet rs = pstmt.executeQuery()) { // Execute and process
+                 while (rs.next()) {
+                      // Reconstruct Post object.
+                      Post post = new Post(rs.getInt("postID"), rs.getString("title"), rs.getString("authorUsername"), rs.getString("content"), rs.getTimestamp("timestamp"), rs.getString("threadName"));
+                      // Create DTO and populate calculated fields.
+                      PostInfo info = new PostInfo(post);
+                      info.setReplyCount(rs.getInt("totalReplies"));
+                      info.setUnreadReplyCount(rs.getInt("unreadReplies"));
+                      info.setRead(rs.getBoolean("isRead"));
+                      postsInfo.add(info); // Add DTO to list.
+                 }
+             } // ResultSet closed.
+         } catch (SQLException e) {
+              // Log specific error.
+              System.err.println("Error getting posts by author '" + authorUsername + "' for viewer " + viewingUserID + ": " + e.getMessage());
+              e.printStackTrace();
+         }
+         return postsInfo; // Return results (possibly empty).
     }
 
-    /** Retrieves replies for a post, returning DTOs with read status, optionally filtering unread. */
+
+    /**
+     * <p> Method: getRepliesForPostWithInfo() </p>
+     * <p> Description: Retrieves replies for a specific post, returning them as ReplyInfo DTOs which
+     * include a boolean flag indicating if the reply has been read by the specified viewing user.
+     * Optionally filters the results to show only unread replies. </p>
+     * @param postID The integer ID of the parent post whose replies are requested.
+     * @param viewingUserID The integer ID of the user currently viewing the replies (for read status).
+     * @param unreadOnly If true, only replies *not* present in the reply_read_status table for the user are returned. If false, all replies are returned.
+     * @return A List of ReplyInfo DTO objects matching the criteria, ordered by oldest first. Returns an empty list on error.
+     */
     public List<ReplyInfo> getRepliesForPostWithInfo(int postID, int viewingUserID, boolean unreadOnly) {
         List<ReplyInfo> repliesInfo = new ArrayList<>();
-        if (viewingUserID == -1) return repliesInfo;
-        String sqlBase = "SELECT r.*, CASE WHEN rrs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? ";
-        String sqlWhere = "WHERE r.postID = ? ";
-        String sqlFilter = unreadOnly ? "AND rrs.userID IS NULL " : "";
-        String sqlOrder = "ORDER BY r.timestamp ASC";
-        String sql = sqlBase + sqlWhere + sqlFilter + sqlOrder;
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setInt(1, viewingUserID);
-            pstmt.setInt(2, postID);
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                Reply reply = new Reply(rs.getInt("replyID"), rs.getInt("postID"), rs.getString("authorUsername"), rs.getString("content"), rs.getTimestamp("timestamp"));
-                ReplyInfo info = new ReplyInfo(reply);
-                info.setRead(rs.getBoolean("isRead"));
-                repliesInfo.add(info);
-            }
-        } catch (SQLException e) { e.printStackTrace(); }
-        return repliesInfo;
-    }
+        if (viewingUserID == -1) return repliesInfo; // Need valid user ID
 
-} // End of Database Class
+        // Base query joins replies with read status for the specific user.
+        // Why LEFT JOIN? To ensure all replies are considered, even if they haven't been read (no entry in rrs).
+        String sqlBase = "SELECT r.*, CASE WHEN rrs.userID IS NOT NULL THEN TRUE ELSE FALSE END AS isRead " +
+                         "FROM replies r LEFT JOIN reply_read_status rrs ON r.replyID = rrs.replyID AND rrs.userID = ? ";
+        // WHERE clause filters by the parent post ID.
+        String sqlWhere = "WHERE r.postID = ? ";
+        // Optional filter: If unreadOnly is true, add condition to only include rows where the LEFT JOIN failed (rrs.userID IS NULL).
+        String sqlFilter = unreadOnly ? "AND rrs.userID IS NULL " : ""; 
+        // Order replies chronologically.
+        String sqlOrder = "ORDER BY r.timestamp ASC"; 
+        
+        String sql = sqlBase + sqlWhere + sqlFilter + sqlOrder; // Combine parts
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            // Bind parameters: viewing user ID for the JOIN condition, post ID for the WHERE clause.
+            pstmt.setInt(1, viewingUserID); 
+            pstmt.setInt(2, postID);      
+            
+            try (ResultSet rs = pstmt.executeQuery()) { // Execute and process
+                while (rs.next()) { // Iterate through all matching replies.
+                    // Reconstruct base Reply object.
+                    Reply reply = new Reply(rs.getInt("replyID"), rs.getInt("postID"), rs.getString("authorUsername"),
+                                            rs.getString("content"), rs.getTimestamp("timestamp"));
+                    // Create DTO and set the calculated read status flag.
+                    ReplyInfo info = new ReplyInfo(reply);
+                    info.setRead(rs.getBoolean("isRead"));
+                    repliesInfo.add(info); // Add DTO to list.
+                }
+            } // ResultSet closed.
+        } catch (SQLException e) {
+             System.err.println("Error retrieving replies with info for post " + postID + " (unreadOnly=" + unreadOnly + "): " + e.getMessage());
+             e.printStackTrace(); // Log specific error.
+        }
+        return repliesInfo; // Return results (possibly empty).
+    }
+}
